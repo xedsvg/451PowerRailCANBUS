@@ -2,9 +2,8 @@
 #include <mcp2515.h>
 #include <EEPROM.h>
 
-#define DEBUG_MODE 1
 // GPIO Inits
-#define POWER_EN_PIN 4
+#define POWER_EN_PIN 13
 
 // CANBUS Inits
 struct can_frame canMsg;
@@ -29,6 +28,9 @@ MCP2515 mcp2515(10); // SPI CS Pin D10
 #define EEPROM_CAN_DIRECT_MSG_ON_ADDR 0x320
 #define EEPROM_CAN_DIRECT_MSG_OFF_ADDR 0x330
 
+#define GENERAL_DEBUG_ADDR 0x65535
+bool DEBUG_MODE = false;
+
 int lastPowerState = 0;
 
 int NUM_OF_ON_PROXY_MESSAGES = 0;
@@ -39,6 +41,8 @@ uint8_t OFF_PROXY_MESSAGES[256] = {};
 
 char buffer[40];
 
+// String content = "";
+
 int32_t addr = 0xffffffff;
 
 void updatePowerState(int newPowerState)
@@ -46,10 +50,11 @@ void updatePowerState(int newPowerState)
   if (newPowerState != lastPowerState)
   {
     lastPowerState = newPowerState;
-    Serial.println("Setting and saving power rail to " + String(lastPowerState));
+    Serial.println("Setting Power Rail to " + lastPowerState ? "ON" : "OFF");
+    Serial.println("Updating EEPROM");
 
     EEPROM.write(LAST_POWER_STATE_ARRD, lastPowerState);
-    digitalWrite(POWER_EN_PIN, lastPowerState);
+    digitalWrite(POWER_EN_PIN, lastPowerState ? HIGH : LOW);
   }
 }
 
@@ -94,34 +99,26 @@ uint32_t getProxyMessageAddr(uint8_t messageArr[], int address)
   return addr;
 }
 
-void setup()
+void getDEBUG_MODE()
 {
-  Serial.begin(115200);
+  DEBUG_MODE = EEPROM.read(GENERAL_DEBUG_ADDR);
   if (DEBUG_MODE)
-    Serial.println("DEBUG MODE TRUE");
+  {
+    Serial.println("DEBUG MODE ENABLED!");
+  }
+}
 
-  // Setup pin to output, read the state from eeprom and write it to the pin;
-  pinMode(POWER_EN_PIN, OUTPUT);
-  lastPowerState = EEPROM.read(LAST_POWER_STATE_ARRD);
-  digitalWrite(POWER_EN_PIN, lastPowerState);
+void setDEBUG_MODE(bool newDEBUG_MODE, bool writeToEEPROM)
+{
+  DEBUG_MODE = newDEBUG_MODE;
+  if (writeToEEPROM)
+    EEPROM.write(GENERAL_DEBUG_ADDR, newDEBUG_MODE);
+}
 
-  // Loop through the EEPROM and read the messages from the ON and OFF proxy;
-  // readProxyMessages(CAN_ON_PROXY_ADDR_START, CAN_ON_PROXY_ADDR_END, NUM_OF_ON_PROXY_MESSAGES, ON_PROXY_MESSAGES);
-  // readProxyMessages(CAN_OFF_PROXY_ADDR_START, CAN_OFF_PROXY_ADDR_END, NUM_OF_OFF_PROXY_MESSAGES, OFF_PROXY_MESSAGES);
-
-  Serial.println(getProxyMessageAddr(ON_PROXY_MESSAGES, 10), HEX);
-  SPI.begin();
-
-  // sprintf(buffer, "ON_PROXY_MESSAGES[0]: %d;", ON_PROXY_MESSAGES[0]);
-  // Serial.println(buffer);
-
+void printWelcomeMessage(){
   // Serial.println("Hello!");
   // Serial.println("I'm the Power Rail Controller!");
 
-  Serial.print("Last power state: ");
-  Serial.println(lastPowerState);
-
-  // // char buffer[40];
   // sprintf(buffer, "I'm reachable at 0x%02X with ON 0x%02X and OFF 0x%02X;\nMy CANBUS Speed is %d;", CAN_DIRECT_ADDR, CAN_DIRECT_MSG_ON, CAN_DIRECT_MSG_OFF, CAN_SPEED);
   // Serial.println(buffer);
 
@@ -140,6 +137,31 @@ void setup()
   // Serial.println("Proxy commands:");
   // Serial.println("  addproxyONmessage <238#DEADBEEF> - Add a proxy ON address to the controller");
   // Serial.println("  addproxyOFFmessage <238#00000000> - Add a proxy OFF message to the controller");
+}
+
+void printStatus() {
+  Serial.print("Last power state: ");
+  Serial.println(lastPowerState ? "ON" : "OFF");
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  getDEBUG_MODE();
+
+  // Setup pin to output, write the last power state to the pin from EEPROM;
+  pinMode(POWER_EN_PIN, OUTPUT);
+  lastPowerState = EEPROM.read(LAST_POWER_STATE_ARRD);
+  digitalWrite(POWER_EN_PIN, lastPowerState ? HIGH : LOW);
+
+  // Loop through the EEPROM and read the messages from the ON and OFF proxy;
+  readProxyMessages(CAN_ON_PROXY_ADDR_START, CAN_ON_PROXY_ADDR_END, NUM_OF_ON_PROXY_MESSAGES, ON_PROXY_MESSAGES);
+  readProxyMessages(CAN_OFF_PROXY_ADDR_START, CAN_OFF_PROXY_ADDR_END, NUM_OF_OFF_PROXY_MESSAGES, OFF_PROXY_MESSAGES);
+  
+  //print status of the power rail
+  printStatus();
+  
+  SPI.begin();
 
   mcp2515.reset();
   mcp2515.setBitrate(CAN_SPEED, MCP_8MHZ);
@@ -149,27 +171,37 @@ void setup()
 void loop()
 {
 
-  // if (Serial.available() > 0)
-  // {
-  //   int inByte = Serial.read();
+  if (Serial.available() > 0)
+  {
+    int inByte = Serial.read();
+    // content.concat(inByte);
 
-  //   switch (inByte)
-  //   {
-  //   case 'w':
-  //     digitalWrite(2, LOW);
-  //     Serial.println("Turned off");
-  //     delay(1000);
-  //     break;
-  //   case 'q':
-  //     digitalWrite(2, HIGH);
-  //     Serial.println("Turned on");
-  //     delay(1000);
-  //     break;
-  //   default:
-  //     Serial.println("No command recognized.");
-  //     break;
-  //   }
-  // }
+    // if (content != "")
+    // {
+    //   Serial.println(content);
+    // }
+    // if (inByte == '\n')
+    // {
+    //   content = "";
+    // }
+
+    switch (inByte)
+    {
+    case 'w':
+      updatePowerState(0);
+      delay(1000);
+      break;
+    case 'q':
+      updatePowerState(1);
+      delay(1000);
+      break;
+    case '\n':
+      break;
+    default:
+      Serial.println("No command recognized.");
+      break;
+    }
+  }
 
   if ((mcp2515.readMessage(&canMsg) == MCP2515::ERROR_OK))
   {
@@ -201,3 +233,4 @@ void loop()
       }
     }
   }
+}
