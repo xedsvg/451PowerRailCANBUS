@@ -1,0 +1,6 @@
+{
+    "C_Cpp.errorSquiggles": "Enabled",
+    "arduino.path": "/usr/local/bin",
+    "arduino.commandPath": "arduino-cli",
+    "arduino.useArduinoCli": true
+}

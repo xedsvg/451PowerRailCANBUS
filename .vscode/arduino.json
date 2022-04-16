@@ -1,0 +1,8 @@
+{
+    "configuration": "cpu=atmega328old",
+    "board": "arduino:avr:nano",
+    "programmer": "avrisp",
+    "port": "/dev/tty.usbserial-143220",
+    "sketch": "powerRail_canbus.ino",
+    "output": "../build"
+}
